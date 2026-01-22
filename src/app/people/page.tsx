@@ -23,68 +23,80 @@ export default function PeoplePage() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
-  // 🔐 Auth Guard
+  /* ---------- AUTH GUARD ---------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
     });
   }, [router]);
 
-  // 📥 Load People
+  /* ---------- LOAD PEOPLE ---------- */
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
+    setLoading(true);
     try {
-      setLoading(true);
       const data = await getPeople();
       setPeople(data);
+    } catch (e: any) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
   }
 
-  // ➕ Add Person
+  /* ---------- ADD ---------- */
   async function handleAdd() {
     if (!name.trim()) {
       setError("Name is required");
       return;
     }
 
-    setError("");
-    await addPerson(name.trim(), phone.trim());
-    setName("");
-    setPhone("");
-    load();
+    try {
+      setError("");
+      await addPerson(name.trim(), phone.trim());
+      setName("");
+      setPhone("");
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
-  // ✏️ Start Edit
+  /* ---------- EDIT ---------- */
   function startEdit(p: any) {
     setEditingId(p.id);
     setEditName(p.name);
     setEditPhone(p.phone || "");
   }
 
-  // 💾 Save Edit
   async function saveEdit() {
     if (!editName.trim()) {
       setError("Name is required");
       return;
     }
 
-    await updatePerson(editingId!, editName.trim(), editPhone.trim());
-    setEditingId(null);
-    load();
+    try {
+      await updatePerson(editingId!, editName.trim(), editPhone.trim());
+      setEditingId(null);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
-  // 🗑 Delete
+  /* ---------- DELETE ---------- */
   async function handleDelete(id: string) {
-    const ok = confirm("Remove this person?");
-    if (!ok) return;
+    if (!confirm("Remove this person?")) return;
 
-    await deletePerson(id);
-    load();
+    try {
+      await deletePerson(id);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   return (
@@ -108,9 +120,7 @@ export default function PeoplePage() {
         />
 
         {error && (
-          <div className="text-red-600 text-sm mb-2">
-            {error}
-          </div>
+          <div className="text-red-600 text-sm mb-2">{error}</div>
         )}
 
         <button
@@ -121,7 +131,7 @@ export default function PeoplePage() {
         </button>
       </div>
 
-      {/* PEOPLE LIST */}
+      {/* LIST */}
       {loading && (
         <div className="text-center text-sm text-gray-500">
           Loading people...
@@ -135,10 +145,7 @@ export default function PeoplePage() {
       )}
 
       {people.map((p) => (
-        <div
-          key={p.id}
-          className="border p-2 mb-2 text-sm rounded"
-        >
+        <div key={p.id} className="border p-2 mb-2 rounded text-sm">
           {editingId === p.id ? (
             <>
               <input
