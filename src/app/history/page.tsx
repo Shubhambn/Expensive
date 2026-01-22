@@ -1,117 +1,104 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getMySplitHistory } from "@/services/splitHistoryService";
-import { buildWhatsAppMessage, openWhatsApp } from "@/utils/whatsapp";
 import { supabase } from "@/db/supabase";
 
 export default function HistoryPage() {
-  const router = useRouter();
-
-  const [splits, setSplits] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [rows, setRows] = useState<any[]>([]);
+  const [error, setError] = useState("");
 
-  // ---------- AUTH GUARD ----------
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        router.push("/auth");
-      } else {
-        setCheckingAuth(false);
-      }
-    });
-  }, [router]);
+    loadHistory();
+  }, []);
 
-  // ---------- LOAD HISTORY ----------
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const data = await getMySplitHistory();
-      setSplits(data || []);
+  async function loadHistory() {
+    setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("Not authenticated");
       setLoading(false);
+      return;
     }
 
-    if (!checkingAuth) load();
-  }, [checkingAuth]);
+    const { data, error } = await supabase
+      .from("payment_requests")
+      .select("*")
+      .eq("owner_user_id", user.id)
+      .order("created_at", { ascending: false });
 
-  if (checkingAuth) {
-    return (
-      <div className="p-4 text-center text-sm text-gray-500">
-        Checking session...
-      </div>
-    );
+    if (error) {
+      setError("Failed to load history");
+    } else {
+      setRows(data || []);
+    }
+
+    setLoading(false);
   }
 
   if (loading) {
-    return <div className="p-4">Loading history...</div>;
+    return <div className="p-4 text-center">Loading…</div>;
+  }
+
+  if (error) {
+    return <div className="p-4 text-red-600">{error}</div>;
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-3">Split History</h1>
+    <main className="p-4 max-w-md mx-auto space-y-4">
+      <h1 className="text-xl font-bold">History</h1>
 
-      {splits.length === 0 && (
-        <div className="text-gray-500 text-sm">
-          No split history yet
+      {rows.length === 0 && (
+        <div className="text-sm text-gray-500 text-center">
+          No payments yet
         </div>
       )}
 
-      {splits.map((split) => (
-        <div key={split.id} className="border p-3 mb-3">
-          <div className="font-semibold">{split.purpose}</div>
-
-          <div className="text-sm text-gray-600 mb-2">
-            ₹{split.total_amount} •{" "}
-            {new Date(split.created_at).toLocaleDateString()}
-          </div>
-
-          {split.payment_participants.map((p: any) => (
-            <div
-              key={p.id}
-              className="border-t pt-2 mt-2 text-sm"
-            >
-              <div className="flex justify-between">
-                <span>{p.name}</span>
-                <span>₹{p.amount}</span>
-              </div>
-
-              <div
-                className={
-                  p.status === "VERIFIED"
-                    ? "text-green-600"
-                    : p.status === "PAID_UNVERIFIED"
-                    ? "text-orange-600"
-                    : p.status === "FALSE"
-                    ? "text-red-600"
-                    : "text-gray-600"
-                }
-              >
-                {p.status}
-              </div>
-
-              {p.status === "PENDING" && (
-                <button
-                  className="text-blue-600 underline text-xs mt-1"
-                  onClick={() => {
-                    const link = `${window.location.origin}/pay/${split.id}`;
-                    const msg = buildWhatsAppMessage({
-                      payerName: p.name,
-                      amount: p.amount,
-                      purpose: split.purpose,
-                      paymentLink: link,
-                    });
-                    openWhatsApp(p.phone, msg);
-                  }}
-                >
-                  Send Reminder
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+      {rows.map((r) => (
+        <HistoryCard key={r.id} row={r} />
       ))}
     </main>
+  );
+}
+
+/* ---------- CARD ---------- */
+function HistoryCard({ row }: { row: any }) {
+  const isPaid = row.status !== "PENDING";
+
+  return (
+    <div className="border rounded-lg p-3 space-y-1 text-sm">
+      <div className="font-semibold">{row.note}</div>
+
+      <div className="flex justify-between">
+        <span>{row.person_name}</span>
+        <span className="font-semibold">₹{row.amount}</span>
+      </div>
+
+      <div className="text-xs text-gray-500">
+        {new Date(row.created_at).toLocaleString()}
+      </div>
+
+      {/* STATUS */}
+      {isPaid ? (
+        <div className="text-green-600 font-semibold mt-1">
+          ✅ Paid {row.status === "PAID_UPI" ? "(UPI)" : "(Cash)"}
+        </div>
+      ) : (
+        <div className="text-yellow-600 font-semibold mt-1">
+          ⏳ Pending
+        </div>
+      )}
+
+      {/* UTR */}
+      {row.payment_reference && (
+        <div className="text-xs text-gray-500">
+          Ref: {row.payment_reference}
+        </div>
+      )}
+    </div>
   );
 }
