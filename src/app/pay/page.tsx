@@ -4,55 +4,49 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/db/supabase";
 import { getPeople } from "@/services/peopleService";
-import { createSplit } from "@/services/splitService";
-import { buildWhatsAppMessage, openWhatsApp } from "@/utils/whatsapp";
+import { generateUpiLink } from "@/utils/upi";
 
 type Mode = "ME" | "SPLIT" | "PARTITION";
+type Method = "UPI" | "CASH" | "ATM";
+type UpiApp = "ANY" | "GPAY" | "PHONEPE" | "PAYTM";
 
 export default function PayPage() {
   const router = useRouter();
 
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<Mode>("ME");
+  const [method, setMethod] = useState<Method | null>(null);
+  const [upiApp, setUpiApp] = useState<UpiApp | null>(null);
+
   const [people, setPeople] = useState<any[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [customAmounts, setCustomAmounts] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // ---------- AUTH ----------
+  /* ---------- AUTH + LOAD ---------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
     });
-  }, [router]);
-
-  // ---------- LOAD PEOPLE ----------
-  useEffect(() => {
     getPeople().then(setPeople);
-  }, []);
+  }, [router]);
 
   const total = Number(amount) || 0;
 
-  // ---------- PARTICIPANT COUNT ----------
+  /* ---------- CALCULATIONS ---------- */
   const participantCount =
     mode === "SPLIT" ? selectedIds.length + 1 : selectedIds.length;
 
-  // ---------- SPLIT AMOUNT ----------
   const splitAmount =
     mode === "SPLIT" && participantCount > 0
       ? Math.floor(total / participantCount)
       : 0;
 
-  // ---------- PARTITION SUM ----------
-  const partitionSum = useMemo(() => {
-    return Object.values(customAmounts).reduce(
-      (s, x) => s + (x || 0),
-      0
-    );
-  }, [customAmounts]);
+  const partitionSum = useMemo(
+    () => Object.values(customAmounts).reduce((s, x) => s + (x || 0), 0),
+    [customAmounts]
+  );
 
-  // ---------- MY SHARE (FIXED) ----------
   const myAmount =
     mode === "ME"
       ? total
@@ -60,131 +54,116 @@ export default function PayPage() {
       ? splitAmount
       : total - partitionSum;
 
-  // ---------- VALIDATION ----------
+  /* ---------- VALIDATION ---------- */
   function validate() {
-    if (!total || total <= 0) {
-      setError("Enter a valid amount");
-      return false;
-    }
+    if (total <= 0) return setError("Enter a valid amount"), false;
+    if (mode !== "ME" && selectedIds.length === 0)
+      return setError("Select at least one person"), false;
+    if (mode === "PARTITION" && partitionSum > total)
+      return setError("Partition exceeds total"), false;
+    if (!method) return setError("Select payment method"), false;
+    if (method === "UPI" && !upiApp)
+      return setError("Select UPI app"), false;
 
-    if (mode !== "ME" && selectedIds.length === 0) {
-      setError("Select at least one person");
-      return false;
-    }
-
-    if (mode === "PARTITION" && partitionSum > total) {
-      setError("Partition amounts exceed total");
-      return false;
-    }
-
-    if (myAmount < 0) {
-      setError("Invalid amount distribution");
-      return false;
-    }
-
+    setError("");
     return true;
   }
 
-  // ---------- PAY ----------
-  async function handlePay() {
+  /* ---------- PROCEED ---------- */
+  function proceedToPay() {
     if (!validate()) return;
 
-    setError("");
-    setLoading(true);
+    sessionStorage.setItem(
+      "pending_payment",
+      JSON.stringify({
+        total,
+        mode,
+        method,
+        upiApp,
+        selectedIds,
+        splitAmount,
+        customAmounts,
+        myAmount,
+      })
+    );
 
-    // 🔑 Participants = people who owe YOU
-    const participants =
-      mode === "ME"
-        ? []
-        : selectedIds.map((id) => {
-            const p = people.find((x) => x.id === id);
-            return {
-              name: p.name,
-              phone: p.phone,
-              amount:
-                mode === "SPLIT"
-                  ? splitAmount
-                  : customAmounts[id] || 0,
-            };
-          });
-
-    const paymentId = await createSplit({
-      totalAmount: total,
-      purpose: "Payment",
-      participants,
-    });
-
-    // ---------- WHATSAPP ----------
-    participants.forEach((p) => {
-      const link = `${window.location.origin}/pay/${paymentId}`;
-      const msg = buildWhatsAppMessage({
-        payerName: p.name,
-        amount: p.amount,
-        purpose: "Payment",
-        paymentLink: link,
+    if (method === "UPI") {
+      const link = generateUpiLink({
+        app: upiApp!,
+        payeeUpiId: "yourupi@bank",
+        payeeName: "You",
+        amount: myAmount,
+        note: `Payment • ${new Date().toLocaleString()}`,
       });
-      openWhatsApp(p.phone, msg);
-    });
 
-    setLoading(false);
-    router.push(`/pay/${paymentId}`);
+      window.location.href = link;
+    } else {
+      router.push("/pay/confirm");
+    }
   }
 
+  /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-3">Pay</h1>
+    <main className="p-4 max-w-md mx-auto space-y-4">
+      <h1 className="text-xl font-bold">Pay</h1>
 
       {/* AMOUNT */}
-      <input
-        type="number"
-        placeholder="Total amount"
-        className="border p-2 w-full mb-3"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
+      <section>
+        <div className="text-sm font-semibold mb-1">Total Amount</div>
+        <input
+          type="number"
+          className="border p-2 w-full"
+          placeholder="Enter amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </section>
 
-      {/* MODE */}
-      <div className="flex gap-2 mb-3 text-sm">
-        {(["ME", "SPLIT", "PARTITION"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`border px-3 py-1 rounded ${
-              mode === m ? "bg-black text-white" : ""
-            }`}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
+      {/* PAYMENT TYPE */}
+      <section>
+        <div className="text-sm font-semibold mb-1">Payment Type</div>
+        <div className="flex gap-2">
+          {(["ME", "SPLIT", "PARTITION"] as Mode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => {
+                setMode(m);
+                setSelectedIds([]);
+                setCustomAmounts({});
+              }}
+              className={`px-3 py-1 rounded border ${
+                mode === m
+                  ? "bg-red-600 text-white border-red-600"
+                  : "border-gray-300 hover:bg-gray-100"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* PEOPLE */}
       {mode !== "ME" && (
-        <div className="mb-3">
-          <div className="text-sm font-semibold mb-1">
-            Select People
-          </div>
-
+        <section>
+          <div className="text-sm font-semibold mb-1">Select People</div>
           {people.map((p) => (
-            <label
-              key={p.id}
-              className="flex items-center gap-2 mb-1 text-sm"
-            >
+            <label key={p.id} className="flex gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={selectedIds.includes(p.id)}
-                onChange={(e) => {
+                onChange={(e) =>
                   setSelectedIds((prev) =>
                     e.target.checked
                       ? [...prev, p.id]
                       : prev.filter((x) => x !== p.id)
-                  );
-                }}
+                  )
+                }
               />
               {p.name}
             </label>
           ))}
-        </div>
+        </section>
       )}
 
       {/* PARTITION INPUT */}
@@ -195,7 +174,7 @@ export default function PayPage() {
             <input
               key={id}
               type="number"
-              className="border p-2 w-full mb-2"
+              className="border p-2 w-full"
               placeholder={`${p.name} amount`}
               onChange={(e) =>
                 setCustomAmounts({
@@ -208,8 +187,13 @@ export default function PayPage() {
         })}
 
       {/* SUMMARY */}
-      <div className="border p-2 text-sm mb-3">
-        <div>Me: ₹{myAmount}</div>
+      <section className="border p-3 text-sm">
+        <div className="font-semibold mb-2">Payment Summary</div>
+
+        <div className="flex justify-between font-semibold">
+          <span>You</span>
+          <span>₹{myAmount}</span>
+        </div>
 
         {mode !== "ME" &&
           selectedIds.map((id) => {
@@ -219,23 +203,76 @@ export default function PayPage() {
                 ? splitAmount
                 : customAmounts[id] || 0;
             return (
-              <div key={id}>
-                {p.name}: ₹{amt}
+              <div key={id} className="flex justify-between">
+                <span>{p.name}</span>
+                <span>₹{amt}</span>
               </div>
             );
           })}
-      </div>
 
-      {error && (
-        <div className="text-red-600 text-sm mb-2">{error}</div>
+        <div className="border-t mt-2 pt-2 flex justify-between font-semibold">
+          <span>Total</span>
+          <span>₹{total}</span>
+        </div>
+      </section>
+
+      {/* PAYMENT METHOD */}
+      <section>
+        <div className="text-sm font-semibold mb-1">Payment Method</div>
+        <div className="flex gap-2">
+          {(["UPI", "CASH", "ATM"] as Method[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => {
+                setMethod(m);
+                setUpiApp(null);
+              }}
+              className={`px-3 py-1 rounded border ${
+                method === m
+                  ? "bg-red-600 text-white border-red-600"
+                  : "border-gray-300 hover:bg-gray-100"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* UPI APP */}
+      {method === "UPI" && (
+        <section className="border p-2 text-sm">
+          <div className="font-semibold mb-2">Choose UPI App</div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ["ANY", "Any UPI"],
+              ["GPAY", "Google Pay"],
+              ["PHONEPE", "PhonePe"],
+              ["PAYTM", "Paytm"],
+            ] as [UpiApp, string][]).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setUpiApp(k)}
+                className={`p-2 rounded border ${
+                  upiApp === k
+                    ? "bg-red-600 text-white border-red-600"
+                    : "border-gray-300 hover:bg-gray-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
+      {error && <div className="text-red-600 text-sm">{error}</div>}
+
       <button
-        onClick={handlePay}
-        disabled={loading}
+        onClick={proceedToPay}
         className="bg-black text-white w-full p-3 rounded"
       >
-        {loading ? "Processing..." : "Pay"}
+        Proceed to Pay
       </button>
     </main>
   );

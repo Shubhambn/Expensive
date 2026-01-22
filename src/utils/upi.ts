@@ -6,18 +6,35 @@ interface UpiParams {
 }
 
 export function generateUpiLink({
+  app,
   payeeUpiId,
   payeeName,
   amount,
   note,
-}: UpiParams): string {
+}: {
+  app: "ANY" | "GPAY" | "PHONEPE" | "PAYTM";
+  payeeUpiId: string;
+  payeeName: string;
+  amount: number;
+  note: string;
+}) {
+  const base =
+    app === "GPAY"
+      ? "tez://upi/pay"
+      : app === "PHONEPE"
+      ? "phonepe://pay"
+      : app === "PAYTM"
+      ? "paytmmp://pay"
+      : "upi://pay";
+
   const params = new URLSearchParams({
     pa: payeeUpiId,
     pn: payeeName,
-    am: amount.toFixed(2),
+    am: amount.toString(),
     cu: "INR",
     tn: note,
   });
 
-  return `upi://pay?${params.toString()}`;
+  return `${base}?${params.toString()}`;
 }
+

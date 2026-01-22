@@ -2,49 +2,43 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-import { useExpenseStore } from "@/store/useExpenseStore";
 import { supabase } from "@/db/supabase";
+import { useExpenseStore } from "@/store/useExpenseStore";
 
 export default function Home() {
   const router = useRouter();
-
   const { personalExpenses, loadPersonalExpenses } = useExpenseStore();
 
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  // ---------- AUTH GUARD ----------
+  // ---------- AUTH ----------
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        router.push("/auth");
-      } else {
-        setCheckingAuth(false);
-      }
+      if (!data.session) router.push("/auth");
+      else setCheckingAuth(false);
     });
   }, [router]);
 
-  // ---------- LOAD DATA ----------
+  // ---------- LOAD ----------
   useEffect(() => {
-    async function load() {
+    (async () => {
       setLoading(true);
       await loadPersonalExpenses();
       setLoading(false);
-    }
-    load();
+    })();
   }, [loadPersonalExpenses]);
 
-  // ---------- SUMMARY ----------
-  const personalSpent = useMemo(() => {
-    return personalExpenses.reduce((sum, e) => sum + e.amount, 0);
-  }, [personalExpenses]);
+  // ---------- CALCULATIONS ----------
+  const personalSpent = useMemo(
+    () => personalExpenses.reduce((s, e) => s + e.amount, 0),
+    [personalExpenses]
+  );
 
-  // Incoming / Outgoing will later come from split tables
+  // (Will be wired to split tables later)
   const incoming = 0;
   const outgoing = 0;
 
-  // ---------- LOGOUT ----------
   const logout = async () => {
     await supabase.auth.signOut();
     router.push("/auth");
@@ -53,15 +47,15 @@ export default function Home() {
   if (checkingAuth) {
     return (
       <div className="p-4 text-center text-sm text-gray-500">
-        Checking session...
+        Checking session…
       </div>
     );
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      {/* ---------- HEADER ---------- */}
-      <div className="flex justify-between items-center mb-4">
+    <main className="p-4 max-w-md mx-auto space-y-5">
+      {/* HEADER */}
+      <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold">Dashboard</h1>
         <button
           onClick={logout}
@@ -71,13 +65,13 @@ export default function Home() {
         </button>
       </div>
 
-      {/* ---------- OVERVIEW ---------- */}
-      <div className="border rounded p-3 mb-5 text-sm">
+      {/* MONEY OVERVIEW */}
+      <div className="border rounded p-3 text-sm">
         <div className="font-semibold mb-2 text-gray-700">
           Money Overview
         </div>
 
-        <div className="flex justify-between mb-1">
+        <div className="flex justify-between">
           <span>Personal Spent</span>
           <span className="font-semibold">₹{personalSpent}</span>
         </div>
@@ -93,10 +87,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ---------- PRIMARY ACTION ---------- */}
+      {/* PRIMARY ACTION */}
       <button
         onClick={() => router.push("/pay")}
-        className="bg-black text-white w-full p-3 rounded mb-4 text-base"
+        className="bg-black text-white w-full p-3 rounded text-base"
       >
         💸 Pay
         <div className="text-xs text-gray-300 mt-1">
@@ -104,7 +98,7 @@ export default function Home() {
         </div>
       </button>
 
-      {/* ---------- SECONDARY ACTIONS ---------- */}
+      {/* QUICK ACTIONS */}
       <div className="grid grid-cols-2 gap-3 text-sm">
         <button
           onClick={() => router.push("/people")}
@@ -135,9 +129,10 @@ export default function Home() {
         </button>
       </div>
 
+      {/* STATE */}
       {loading && (
-        <div className="text-center text-xs text-gray-500 mt-4">
-          Loading data...
+        <div className="text-center text-xs text-gray-500">
+          Loading data…
         </div>
       )}
     </main>

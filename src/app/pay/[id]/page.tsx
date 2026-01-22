@@ -1,3 +1,4 @@
+// src/app/pay/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
