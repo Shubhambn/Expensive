@@ -1,12 +1,16 @@
+// src/app/pay/confirm/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getPeople } from "@/services/peopleService";
 import { createPaymentRequest } from "@/services/paymentRequestService";
+import { PAYEE } from "../../../../public/config/Mvp";
 
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+const MY_UPI_ID = PAYEE.upiId || "";
+const MY_UPI_NAME = PAYEE.name || "You";
 
 export default function ConfirmPage() {
   const router = useRouter();
@@ -31,10 +35,9 @@ export default function ConfirmPage() {
     setIntent(parsed);
 
     getPeople().then((all) => {
-      const selected = all.filter((p) =>
-        parsed.selectedIds.includes(p.id)
+      setPeople(
+        all.filter((p) => parsed.selectedIds.includes(p.id))
       );
-      setPeople(selected);
     });
   }, [router]);
 
@@ -42,28 +45,26 @@ export default function ConfirmPage() {
 
   const date = new Date(intent.createdAt).toLocaleString();
 
-  /* ---------- SEND WHATSAPP (ONE PERSON) ---------- */
+  /* ---------- SEND WHATSAPP ---------- */
   async function sendWhatsApp(p: any, amount: number) {
     if (sentIds.has(p.id)) return;
 
     setSendingId(p.id);
 
     try {
-      // 1️⃣ Create DB-backed payment request
+      // ✅ Create payment request
       const requestId = await createPaymentRequest({
         personId: p.id,
         personName: p.name,
         personPhone: p.phone,
         amount,
-        note: `${intent.note} • ${date}`,
-        payeeUpiId: "yourupi@bank",
-        payeeName: "You",
+        note: intent.note,
+        payeeUpiId: MY_UPI_ID,
+        payeeName: MY_UPI_NAME,
       });
 
-      // 2️⃣ Stable public link (NO localhost problem)
       const link = `${APP_URL}/pay/collect/${requestId}`;
 
-      // 3️⃣ WhatsApp message (human-readable)
       const message = `
 ${intent.note} • ${date}
 
@@ -78,10 +79,10 @@ ${link}
         "_blank"
       );
 
-      // 4️⃣ Mark as sent (prevent duplicates)
       setSentIds((prev) => new Set(prev).add(p.id));
-    } catch (e) {
-      alert("Failed to create payment link. Please try again.");
+    } catch (err) {
+      console.error("Payment link error:", err);
+      alert("Failed to create payment link. Check console.");
     } finally {
       setSendingId(null);
     }
@@ -92,14 +93,12 @@ ${link}
     <main className="p-4 max-w-md mx-auto space-y-4">
       <h1 className="text-xl font-bold">Confirm Payment</h1>
 
-      {/* SUMMARY */}
       <div className="border p-3 text-sm rounded">
         <div className="font-semibold">{intent.note}</div>
         <div>Total Paid: ₹{intent.amount}</div>
         <div className="text-xs text-gray-500">{date}</div>
       </div>
 
-      {/* STEP 1 — CONFIRM */}
       {!confirmed && (
         <div className="space-y-2">
           <button
@@ -118,19 +117,15 @@ ${link}
         </div>
       )}
 
-      {/* STEP 2 — AFTER CONFIRM */}
       {confirmed && (
         <>
-          {/* OPTIONAL UTR */}
           <input
-            type="text"
             className="border p-2 w-full rounded"
             placeholder="UTR / Reference (optional)"
             value={utr}
             onChange={(e) => setUtr(e.target.value)}
           />
 
-          {/* SEND ONE BY ONE */}
           <div className="space-y-2">
             {people.map((p) => {
               const amount =
@@ -147,7 +142,7 @@ ${link}
                   onClick={() => sendWhatsApp(p, amount)}
                   className={`border w-full p-2 text-left rounded ${
                     sent
-                      ? "bg-green-50 text-green-700 border-green-300"
+                      ? "bg-green-50 text-green-700"
                       : "hover:bg-gray-50"
                   }`}
                 >
@@ -161,7 +156,6 @@ ${link}
             })}
           </div>
 
-          {/* FINISH */}
           {sentIds.size === people.length && (
             <button
               onClick={() => router.push("/")}

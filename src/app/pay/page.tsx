@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/db/supabase";
 import { getPeople } from "@/services/peopleService";
-import { generateUpiLink } from "@/utils/upi";
+import {
+  generateUpiLink,
+  isMobileDevice,
+  UpiApp,
+} from "@/utils/upi";
 
 type Mode = "ME" | "SPLIT" | "PARTITION";
-type Method = "UPI" | "CASH" | "ATM";
-type UpiApp = "ANY" | "GPAY" | "PHONEPE" | "PAYTM";
+type Method = "UPI" | "CASH";
 
 export default function PayPage() {
   const router = useRouter();
@@ -30,12 +33,13 @@ export default function PayPage() {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
     });
+
     getPeople().then(setPeople);
   }, [router]);
 
   const total = Number(amount) || 0;
 
-  /* ---------- SPLIT CALC ---------- */
+  /* ---------- SPLIT ---------- */
   const participantCount =
     mode === "SPLIT" ? selectedIds.length + 1 : selectedIds.length;
 
@@ -44,13 +48,9 @@ export default function PayPage() {
       ? Math.floor(total / participantCount)
       : 0;
 
-  /* ---------- PARTITION CALC ---------- */
+  /* ---------- PARTITION ---------- */
   const partitionSum = useMemo(
-    () =>
-      Object.values(customAmounts).reduce(
-        (sum, v) => sum + (v || 0),
-        0
-      ),
+    () => Object.values(customAmounts).reduce((s, x) => s + (x || 0), 0),
     [customAmounts]
   );
 
@@ -62,13 +62,13 @@ export default function PayPage() {
       : Math.max(total - partitionSum, 0);
 
   /* ---------- VALIDATION ---------- */
-  function validateBeforePay() {
+  function validate() {
     if (total <= 0) return setError("Enter valid amount"), false;
-    if (!note.trim()) return setError("Note is required"), false;
+    if (!note.trim()) return setError("Note required"), false;
     if (mode !== "ME" && selectedIds.length === 0)
-      return setError("Select at least one person"), false;
+      return setError("Select people"), false;
     if (mode === "PARTITION" && partitionSum > total)
-      return setError("Partition exceeds total amount"), false;
+      return setError("Partition exceeds total"), false;
     if (!method) return setError("Select payment method"), false;
     if (method === "UPI" && !upiApp)
       return setError("Select UPI app"), false;
@@ -77,23 +77,29 @@ export default function PayPage() {
     return true;
   }
 
-  /* ---------- ACTIONS ---------- */
+  /* ---------- OPEN UPI ---------- */
   function openUpi() {
-    if (!validateBeforePay()) return;
+    if (!validate()) return;
+
+    if (!isMobileDevice()) {
+      alert("UPI apps open only on mobile devices");
+      return;
+    }
 
     const link = generateUpiLink({
       app: upiApp!,
-      payeeUpiId: "yourupi@bank",
-      payeeName: "You",
+      payeeUpiId: process.env.NEXT_PUBLIC_UPI_ID!,
+      payeeName: process.env.NEXT_PUBLIC_UPI_NAME || "You",
       amount: myAmount,
-      note: `${note} • ${new Date().toLocaleString()}`,
+      note,
     });
 
     window.location.href = link;
   }
 
+  /* ---------- CONFIRM ---------- */
   function confirmPaid() {
-    if (!validateBeforePay()) return;
+    if (!validate()) return;
 
     sessionStorage.setItem(
       "payment_intent",
@@ -117,9 +123,8 @@ export default function PayPage() {
   /* ---------- UI ---------- */
   return (
     <main className="p-4 max-w-md mx-auto space-y-4">
-      <h1 className="text-xl font-bold">Pay</h1>
+      <h1 className="text-xl font-bold text-red-600">Pay</h1>
 
-      {/* AMOUNT */}
       <input
         type="number"
         className="border p-2 w-full"
@@ -128,9 +133,7 @@ export default function PayPage() {
         onChange={(e) => setAmount(e.target.value)}
       />
 
-      {/* NOTE */}
       <input
-        type="text"
         className="border p-2 w-full"
         placeholder="Note (Dinner, Trip...)"
         value={note}
@@ -148,7 +151,7 @@ export default function PayPage() {
               setCustomAmounts({});
             }}
             className={`px-3 py-1 rounded border ${
-              mode === m ? "bg-red-600 text-white" : "border-gray-300"
+              mode === m ? "bg-red-600 text-white" : ""
             }`}
           >
             {m}
@@ -175,16 +178,16 @@ export default function PayPage() {
           </label>
         ))}
 
-      {/* PARTITION INPUTS */}
+      {/* PARTITION */}
       {mode === "PARTITION" &&
         selectedIds.map((id) => {
           const p = people.find((x) => x.id === id);
           return (
             <input
               key={id}
-              type="number"
               className="border p-2 w-full"
               placeholder={`${p.name} amount`}
+              type="number"
               value={customAmounts[id] || ""}
               onChange={(e) =>
                 setCustomAmounts({
@@ -197,42 +200,17 @@ export default function PayPage() {
         })}
 
       {/* PREVIEW */}
-      <div className="border p-3 text-sm space-y-1">
+      <div className="border p-3 text-sm">
         <div className="font-semibold">Preview</div>
-
         <div className="flex justify-between">
           <span>You</span>
           <span>₹{myAmount}</span>
-        </div>
-
-        {mode !== "ME" &&
-          selectedIds.map((id) => {
-            const p = people.find((x) => x.id === id);
-            const amt =
-              mode === "SPLIT"
-                ? splitAmount
-                : customAmounts[id] || 0;
-
-            return (
-              <div
-                key={id}
-                className="flex justify-between text-gray-700"
-              >
-                <span>{p.name}</span>
-                <span>₹{amt}</span>
-              </div>
-            );
-          })}
-
-        <div className="border-t pt-1 flex justify-between font-semibold">
-          <span>Total</span>
-          <span>₹{total}</span>
         </div>
       </div>
 
       {/* METHOD */}
       <div className="flex gap-2">
-        {(["UPI", "CASH", "ATM"] as Method[]).map((m) => (
+        {(["UPI", "CASH"] as Method[]).map((m) => (
           <button
             key={m}
             onClick={() => {
@@ -240,7 +218,7 @@ export default function PayPage() {
               setUpiApp(null);
             }}
             className={`px-3 py-1 rounded border ${
-              method === m ? "bg-red-600 text-white" : "border-gray-300"
+              method === m ? "bg-red-600 text-white" : ""
             }`}
           >
             {m}
@@ -270,9 +248,9 @@ export default function PayPage() {
       {method === "UPI" && (
         <button
           onClick={openUpi}
-          className="bg-gray-800 text-white w-full p-3 rounded"
+          className="bg-red-600 text-white w-full p-3 rounded"
         >
-          Open Payment App
+          Open UPI App
         </button>
       )}
 

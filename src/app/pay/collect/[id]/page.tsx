@@ -1,12 +1,17 @@
+// src/app/pay/collect/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/db/supabase";
 import { generateUpiLink } from "@/utils/upi";
-
+import { PAYEE } from "../../../../../public/config/Mvp";
 type Method = "UPI" | "CASH";
 type UpiApp = "GPAY" | "PHONEPE" | "PAYTM" | "ANY";
+
+/* ========= MVP PAYEE CONFIG (ENV) ========= */
+const PAYEE_NAME = PAYEE.name;
+const PAYEE_UPI = PAYEE.upiId;
 
 export default function CollectPage() {
   const { id } = useParams();
@@ -41,7 +46,7 @@ export default function CollectPage() {
     load();
   }, [id]);
 
-  /* ---------- LOADING / ERROR ---------- */
+  /* ---------- STATES ---------- */
   if (loading) {
     return <div className="p-4 text-center">Loading…</div>;
   }
@@ -50,7 +55,7 @@ export default function CollectPage() {
     return <div className="p-4 text-center text-red-600">{error}</div>;
   }
 
-  /* ---------- ALREADY PAID (HARD LOCK) ---------- */
+  /* ---------- HARD LOCK ---------- */
   if (request.status !== "PENDING") {
     return (
       <main className="p-4 max-w-md mx-auto space-y-4">
@@ -59,16 +64,13 @@ export default function CollectPage() {
         </h1>
 
         <div className="border rounded-lg p-4 space-y-2">
-          <div className="font-semibold">
-            {request.note}
-          </div>
-
+          <div className="font-semibold">{request.note}</div>
           <div>
             Amount: <b>₹{request.amount}</b>
           </div>
 
           <div className="text-green-700 font-semibold">
-            ✅ You have already paid
+            ✅ Payment already completed
           </div>
 
           {request.payment_reference && (
@@ -79,8 +81,7 @@ export default function CollectPage() {
 
           {request.paid_at && (
             <div className="text-xs text-gray-400">
-              Paid on{" "}
-              {new Date(request.paid_at).toLocaleString()}
+              Paid on {new Date(request.paid_at).toLocaleString()}
             </div>
           )}
         </div>
@@ -88,27 +89,29 @@ export default function CollectPage() {
     );
   }
 
-  /* ---------- OPEN UPI ---------- */
+  /* ---------- OPEN UPI (MUST BE USER ACTION) ---------- */
   function openUpi(app: UpiApp) {
-    setMethod("UPI");
-    setError("");
+    if (!PAYEE_UPI) {
+      setError("Payment configuration missing");
+      return;
+    }
 
     const link = generateUpiLink({
       app,
-      payeeUpiId: request.payee_upi_id,
-      payeeName: request.payee_name,
+      payeeUpiId: PAYEE_UPI,
+      payeeName: PAYEE_NAME,
       amount: request.amount,
       note: request.note,
     });
 
-    // Opens respective UPI app / chooser
+    // IMPORTANT: no state update before redirect
     window.location.href = link;
   }
 
-  /* ---------- CONFIRM PAYMENT ---------- */
+  /* ---------- CONFIRM PAID ---------- */
   async function confirmPaid() {
     if (method === "UPI" && !utr.trim()) {
-      setError("UTR / Reference is required for UPI payments");
+      setError("UTR / Reference is required for UPI payment");
       return;
     }
 
@@ -123,15 +126,14 @@ export default function CollectPage() {
         paid_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("status", "PENDING"); // 🔒 double-submit protection
+      .eq("status", "PENDING");
 
     if (error) {
-      setError("Failed to confirm payment. Please try again.");
+      setError("Failed to confirm payment. Try again.");
       setSubmitting(false);
       return;
     }
 
-    // Update local state → triggers "Already Paid" UI
     setRequest({
       ...request,
       status: method === "UPI" ? "PAID_UPI" : "PAID_CASH",
@@ -149,26 +151,19 @@ export default function CollectPage() {
         Payment Request
       </h1>
 
-      {/* PAYMENT SUMMARY */}
+      {/* SUMMARY */}
       <div className="border rounded-lg p-4 space-y-3">
-        <div className="font-semibold">
-          {request.note}
-        </div>
+        <div className="font-semibold">{request.note}</div>
 
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">
-            Amount to Pay
-          </span>
+        <div className="flex justify-between">
+          <span className="text-gray-600">Amount</span>
           <span className="text-2xl font-bold">
             ₹{request.amount}
           </span>
         </div>
 
         <div className="text-sm text-gray-600">
-          Paying to{" "}
-          <span className="font-semibold text-black">
-            {request.payee_name}
-          </span>
+          Paying to <b>{PAYEE_NAME}</b>
         </div>
       </div>
 
@@ -185,7 +180,7 @@ export default function CollectPage() {
             setError("");
           }}
           className={`border w-full py-3 rounded ${
-            method === "UPI" ? "bg-black text-white" : ""
+            method === "UPI" ? "bg-red-600 text-white" : ""
           }`}
         >
           UPI
@@ -198,7 +193,7 @@ export default function CollectPage() {
             setError("");
           }}
           className={`border w-full py-3 rounded ${
-            method === "CASH" ? "bg-black text-white" : ""
+            method === "CASH" ? "bg-red-600 text-white" : ""
           }`}
         >
           Cash
@@ -247,9 +242,7 @@ export default function CollectPage() {
           )}
 
           {error && (
-            <div className="text-red-600 text-sm">
-              {error}
-            </div>
+            <div className="text-red-600 text-sm">{error}</div>
           )}
 
           <button
