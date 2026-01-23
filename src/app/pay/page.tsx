@@ -4,14 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/db/supabase";
 import { getPeople } from "@/services/peopleService";
-import {
-  generateUpiLink,
-  isMobileDevice,
-  UpiApp,
-} from "@/utils/upi";
 
 type Mode = "ME" | "SPLIT" | "PARTITION";
 type Method = "UPI" | "CASH";
+
+const PAYEE_UPI = process.env.NEXT_PUBLIC_UPI_ID || "";
+const PAYEE_NAME = process.env.NEXT_PUBLIC_UPI_NAME || "You";
 
 export default function PayPage() {
   const router = useRouter();
@@ -19,21 +17,18 @@ export default function PayPage() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [mode, setMode] = useState<Mode>("ME");
-
   const [method, setMethod] = useState<Method | null>(null);
-  const [upiApp, setUpiApp] = useState<UpiApp | null>(null);
 
   const [people, setPeople] = useState<any[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [customAmounts, setCustomAmounts] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
 
-  /* ---------- AUTH + LOAD ---------- */
+  /* ---------- AUTH ---------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
     });
-
     getPeople().then(setPeople);
   }, [router]);
 
@@ -50,7 +45,7 @@ export default function PayPage() {
 
   /* ---------- PARTITION ---------- */
   const partitionSum = useMemo(
-    () => Object.values(customAmounts).reduce((s, x) => s + (x || 0), 0),
+    () => Object.values(customAmounts).reduce((s, v) => s + (v || 0), 0),
     [customAmounts]
   );
 
@@ -63,38 +58,39 @@ export default function PayPage() {
 
   /* ---------- VALIDATION ---------- */
   function validate() {
-    if (total <= 0) return setError("Enter valid amount"), false;
-    if (!note.trim()) return setError("Note required"), false;
+    if (total <= 0) return setError("Enter amount"), false;
+    if (!note.trim()) return setError("Add a note"), false;
     if (mode !== "ME" && selectedIds.length === 0)
       return setError("Select people"), false;
     if (mode === "PARTITION" && partitionSum > total)
-      return setError("Partition exceeds total"), false;
+      return setError("Amount mismatch"), false;
     if (!method) return setError("Select payment method"), false;
-    if (method === "UPI" && !upiApp)
-      return setError("Select UPI app"), false;
 
     setError("");
     return true;
   }
 
+  /* ---------- UPI MESSAGE ---------- */
+  const upiMessage = `
+Pay ₹${myAmount}
+UPI: ${PAYEE_UPI}
+Name: ${PAYEE_NAME}
+Note: ${note}
+`.trim();
+
   /* ---------- OPEN UPI ---------- */
   function openUpi() {
     if (!validate()) return;
 
-    if (!isMobileDevice()) {
-      alert("UPI apps open only on mobile devices");
-      return;
-    }
-
-    const link = generateUpiLink({
-      app: upiApp!,
-      payeeUpiId: process.env.NEXT_PUBLIC_UPI_ID!,
-      payeeName: process.env.NEXT_PUBLIC_UPI_NAME || "You",
-      amount: myAmount,
-      note,
+    const params = new URLSearchParams({
+      pa: PAYEE_UPI,
+      pn: PAYEE_NAME,
+      am: myAmount.toString(),
+      cu: "INR",
+      tn: note,
     });
 
-    window.location.href = link;
+    window.location.href = `upi://pay?${params.toString()}`;
   }
 
   /* ---------- CONFIRM ---------- */
@@ -108,7 +104,6 @@ export default function PayPage() {
         note,
         mode,
         method,
-        upiApp,
         selectedIds,
         splitAmount,
         customAmounts,
@@ -122,20 +117,22 @@ export default function PayPage() {
 
   /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-4">
-      <h1 className="text-xl font-bold text-red-600">Pay</h1>
+    <main className="p-4 max-w-md mx-auto space-y-5 bg-white text-black">
+      <h1 className="text-xl font-semibold">Pay</h1>
 
+      {/* AMOUNT */}
       <input
         type="number"
-        className="border p-2 w-full"
+        className="border p-3 w-full rounded"
         placeholder="Amount"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
 
+      {/* NOTE */}
       <input
-        className="border p-2 w-full"
-        placeholder="Note (Dinner, Trip...)"
+        className="border p-3 w-full rounded"
+        placeholder="Note (Dinner, Rent...)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
@@ -150,8 +147,8 @@ export default function PayPage() {
               setSelectedIds([]);
               setCustomAmounts({});
             }}
-            className={`px-3 py-1 rounded border ${
-              mode === m ? "bg-red-600 text-white" : ""
+            className={`flex-1 border p-2 rounded ${
+              mode === m ? "bg-black text-white" : ""
             }`}
           >
             {m}
@@ -160,23 +157,29 @@ export default function PayPage() {
       </div>
 
       {/* PEOPLE */}
-      {mode !== "ME" &&
-        people.map((p) => (
-          <label key={p.id} className="flex gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(p.id)}
-              onChange={(e) =>
-                setSelectedIds((prev) =>
-                  e.target.checked
-                    ? [...prev, p.id]
-                    : prev.filter((x) => x !== p.id)
-                )
-              }
-            />
-            {p.name}
-          </label>
-        ))}
+      {mode !== "ME" && (
+        <div className="space-y-2">
+          {people.map((p) => (
+            <label
+              key={p.id}
+              className="flex items-center gap-2 border p-2 rounded"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(p.id)}
+                onChange={(e) =>
+                  setSelectedIds((prev) =>
+                    e.target.checked
+                      ? [...prev, p.id]
+                      : prev.filter((x) => x !== p.id)
+                  )
+                }
+              />
+              {p.name}
+            </label>
+          ))}
+        </div>
+      )}
 
       {/* PARTITION */}
       {mode === "PARTITION" &&
@@ -185,9 +188,9 @@ export default function PayPage() {
           return (
             <input
               key={id}
-              className="border p-2 w-full"
-              placeholder={`${p.name} amount`}
               type="number"
+              className="border p-2 w-full rounded"
+              placeholder={`${p?.name} amount`}
               value={customAmounts[id] || ""}
               onChange={(e) =>
                 setCustomAmounts({
@@ -199,13 +202,21 @@ export default function PayPage() {
           );
         })}
 
-      {/* PREVIEW */}
-      <div className="border p-3 text-sm">
-        <div className="font-semibold">Preview</div>
-        <div className="flex justify-between">
-          <span>You</span>
-          <span>₹{myAmount}</span>
-        </div>
+      {/* SUMMARY */}
+      <div className="border rounded p-3 text-sm space-y-1">
+        <div className="font-medium">You pay</div>
+        <div className="text-2xl font-semibold">₹{myAmount}</div>
+      </div>
+
+      {/* PAYMENT DETAILS */}
+      <div className="border rounded p-3 text-xs bg-gray-50">
+        <pre className="whitespace-pre-wrap">{upiMessage}</pre>
+        <button
+          onClick={() => navigator.clipboard.writeText(upiMessage)}
+          className="mt-2 border w-full p-2 rounded"
+        >
+          Copy payment details
+        </button>
       </div>
 
       {/* METHOD */}
@@ -213,12 +224,9 @@ export default function PayPage() {
         {(["UPI", "CASH"] as Method[]).map((m) => (
           <button
             key={m}
-            onClick={() => {
-              setMethod(m);
-              setUpiApp(null);
-            }}
-            className={`px-3 py-1 rounded border ${
-              method === m ? "bg-red-600 text-white" : ""
+            onClick={() => setMethod(m)}
+            className={`flex-1 border p-2 rounded ${
+              method === m ? "bg-black text-white" : ""
             }`}
           >
             {m}
@@ -226,33 +234,17 @@ export default function PayPage() {
         ))}
       </div>
 
-      {/* UPI APPS */}
-      {method === "UPI" && (
-        <div className="grid grid-cols-2 gap-2">
-          {(["ANY", "GPAY", "PHONEPE", "PAYTM"] as UpiApp[]).map((a) => (
-            <button
-              key={a}
-              onClick={() => setUpiApp(a)}
-              className={`border p-2 rounded ${
-                upiApp === a ? "bg-red-600 text-white" : ""
-              }`}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && <div className="text-red-600 text-sm">{error}</div>}
-
+      {/* ACTION */}
       {method === "UPI" && (
         <button
           onClick={openUpi}
-          className="bg-red-600 text-white w-full p-3 rounded"
+          className="bg-black text-white w-full p-3 rounded"
         >
           Open UPI App
         </button>
       )}
+
+      {error && <div className="text-sm text-red-600">{error}</div>}
 
       <button
         onClick={confirmPaid}
