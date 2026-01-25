@@ -1,4 +1,3 @@
-// src/app/pay/requests/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -51,15 +50,19 @@ export default function PaymentRequestsPage() {
 
   /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-4">
-      <h1 className="text-xl font-bold">Payment Requests</h1>
+    <main className="min-h-screen bg-black p-4 max-w-md mx-auto space-y-4 text-white">
+      <h1 className="text-xl font-bold text-red-500">
+        Payment Requests
+      </h1>
 
       {loading && (
-        <div className="text-sm text-gray-500">Loading requests…</div>
+        <div className="text-sm text-white/60">
+          Loading requests…
+        </div>
       )}
 
       {!loading && requests.length === 0 && (
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-white/60">
           No payment requests yet.
         </div>
       )}
@@ -68,45 +71,61 @@ export default function PaymentRequestsPage() {
       <div className="space-y-3">
         {requests.map((r) => {
           const paid = r.status !== "PENDING";
+          const createdAt = new Date(r.created_at);
 
           return (
             <div
               key={r.id}
-              className="border rounded-lg p-3 space-y-1"
+              className="border border-white/30 rounded p-3 space-y-2"
             >
+              {/* TOP */}
               <div className="flex justify-between items-center">
-                <div className="font-semibold">{r.person_name}</div>
-                <div className="font-bold">₹{r.amount}</div>
+                <div className="font-semibold">
+                  {r.person_name}
+                </div>
+                <div className="font-bold text-red-500">
+                  ₹{r.amount}
+                </div>
               </div>
 
-              <div className="text-sm text-gray-600">{r.note}</div>
+              {/* NOTE */}
+              <div className="text-sm text-white/70">
+                {r.note}
+              </div>
 
+              {/* DATE + STATUS */}
               <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-500">
-                  {new Date(r.created_at).toLocaleString()}
+                <span className="text-white/40">
+                  Requested on{" "}
+                  {createdAt.toLocaleDateString()}{" "}
+                  {createdAt.toLocaleTimeString()}
                 </span>
 
                 <span
                   className={`font-semibold ${
-                    paid ? "text-green-600" : "text-orange-600"
+                    paid
+                      ? "text-red-500"
+                      : "text-white/60"
                   }`}
                 >
                   {paid ? "PAID" : "PENDING"}
                 </span>
               </div>
 
+              {/* REFERENCE */}
               {paid && r.payment_reference && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-white/40">
                   Ref: {r.payment_reference}
                 </div>
               )}
 
+              {/* ACTION */}
               {!paid && (
                 <button
                   onClick={() =>
                     router.push(`/pay/collect/${r.id}`)
                   }
-                  className="mt-2 text-sm underline text-black"
+                  className="text-sm text-red-500 underline"
                 >
                   Open payment link →
                 </button>

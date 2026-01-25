@@ -1,4 +1,3 @@
-// src/app/pay/collect/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -6,10 +5,11 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/db/supabase";
 import { generateUpiLink } from "@/utils/upi";
 import { PAYEE } from "../../../../../public/config/Mvp";
+
 type Method = "UPI" | "CASH";
 type UpiApp = "GPAY" | "PHONEPE" | "PAYTM" | "ANY";
 
-/* ========= MVP PAYEE CONFIG (ENV) ========= */
+/* ========= MVP PAYEE CONFIG ========= */
 const PAYEE_NAME = PAYEE.name;
 const PAYEE_UPI = PAYEE.upiId;
 
@@ -42,45 +42,44 @@ export default function CollectPage() {
       }
       setLoading(false);
     }
-
     load();
   }, [id]);
 
   /* ---------- STATES ---------- */
   if (loading) {
-    return <div className="p-4 text-center">Loading…</div>;
+    return <div className="p-4 text-center text-white/60">Loading…</div>;
   }
 
   if (error) {
-    return <div className="p-4 text-center text-red-600">{error}</div>;
+    return <div className="p-4 text-center text-red-500">{error}</div>;
   }
+
+  const createdAt = new Date(request.created_at).toLocaleString();
 
   /* ---------- HARD LOCK ---------- */
   if (request.status !== "PENDING") {
     return (
-      <main className="p-4 max-w-md mx-auto space-y-4">
-        <h1 className="text-xl font-bold text-center">
+      <main className="min-h-screen bg-black p-4 max-w-md mx-auto space-y-4 text-white">
+        <h1 className="text-xl font-bold text-red-500 text-center">
           Payment Status
         </h1>
 
-        <div className="border rounded-lg p-4 space-y-2">
+        <div className="border border-white/30 rounded p-4 space-y-2">
           <div className="font-semibold">{request.note}</div>
-          <div>
-            Amount: <b>₹{request.amount}</b>
-          </div>
+          <div>Amount: ₹{request.amount}</div>
 
-          <div className="text-green-700 font-semibold">
+          <div className="text-red-500 font-semibold">
             ✅ Payment already completed
           </div>
 
           {request.payment_reference && (
-            <div className="text-xs text-gray-500">
-              Reference: {request.payment_reference}
+            <div className="text-xs text-white/50">
+              Ref: {request.payment_reference}
             </div>
           )}
 
           {request.paid_at && (
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-white/40">
               Paid on {new Date(request.paid_at).toLocaleString()}
             </div>
           )}
@@ -89,10 +88,10 @@ export default function CollectPage() {
     );
   }
 
-  /* ---------- OPEN UPI (MUST BE USER ACTION) ---------- */
+  /* ---------- OPEN UPI ---------- */
   function openUpi(app: UpiApp) {
     if (!PAYEE_UPI) {
-      setError("Payment configuration missing");
+      setError("UPI configuration missing");
       return;
     }
 
@@ -104,14 +103,13 @@ export default function CollectPage() {
       note: request.note,
     });
 
-    // IMPORTANT: no state update before redirect
     window.location.href = link;
   }
 
   /* ---------- CONFIRM PAID ---------- */
   async function confirmPaid() {
     if (method === "UPI" && !utr.trim()) {
-      setError("UTR / Reference is required for UPI payment");
+      setError("UTR / Reference is required");
       return;
     }
 
@@ -129,7 +127,7 @@ export default function CollectPage() {
       .eq("status", "PENDING");
 
     if (error) {
-      setError("Failed to confirm payment. Try again.");
+      setError("Failed to confirm payment");
       setSubmitting(false);
       return;
     }
@@ -146,41 +144,41 @@ export default function CollectPage() {
 
   /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-5">
-      <h1 className="text-xl font-bold text-center">
-        Payment Request
+    <main className="min-h-screen bg-black p-4 max-w-md mx-auto space-y-5 text-white">
+      <h1 className="text-xl font-bold text-red-500 text-center">
+        Hello {request.person_name} 👋
       </h1>
 
-      {/* SUMMARY */}
-      <div className="border rounded-lg p-4 space-y-3">
+      {/* DETAILS */}
+      <div className="border border-white/30 rounded p-4 space-y-2">
+        <div className="text-sm text-white/50">
+          Requested on {createdAt}
+        </div>
+
         <div className="font-semibold">{request.note}</div>
 
-        <div className="flex justify-between">
-          <span className="text-gray-600">Amount</span>
-          <span className="text-2xl font-bold">
+        <div className="flex justify-between items-center">
+          <span className="text-white/60">Amount</span>
+          <span className="text-2xl font-bold text-red-500">
             ₹{request.amount}
           </span>
         </div>
 
-        <div className="text-sm text-gray-600">
-          Paying to <b>{PAYEE_NAME}</b>
+        <div className="text-sm text-white/60">
+          Pay to <b>{PAYEE_NAME}</b>
         </div>
       </div>
 
-      {/* STEP 1 — METHOD */}
+      {/* METHOD */}
       <div className="space-y-2">
-        <div className="text-sm font-semibold">
-          Choose Payment Method
-        </div>
-
         <button
           onClick={() => {
             setMethod("UPI");
             setShowUpiApps(true);
             setError("");
           }}
-          className={`border w-full py-3 rounded ${
-            method === "UPI" ? "bg-red-600 text-white" : ""
+          className={`border w-full py-3 rounded text-center ${
+            method === "UPI" ? "text-red-500 border-red-500" : "border-white/30"
           }`}
         >
           UPI
@@ -192,65 +190,51 @@ export default function CollectPage() {
             setShowUpiApps(false);
             setError("");
           }}
-          className={`border w-full py-3 rounded ${
-            method === "CASH" ? "bg-red-600 text-white" : ""
+          className={`border w-full py-3 rounded text-center ${
+            method === "CASH" ? "text-red-500 border-red-500" : "border-white/30"
           }`}
         >
           Cash
         </button>
       </div>
 
-      {/* STEP 2 — UPI APPS */}
+      {/* UPI APPS */}
       {method === "UPI" && showUpiApps && (
-        <div className="border rounded-lg p-3 space-y-2">
-          <div className="text-sm font-semibold">
-            Select UPI App
-          </div>
-
+        <div className="border border-white/30 rounded p-3 space-y-2">
           {(["GPAY", "PHONEPE", "PAYTM", "ANY"] as UpiApp[]).map((a) => (
             <button
               key={a}
               onClick={() => openUpi(a)}
-              className="border w-full py-3 rounded"
+              className="border border-white/30 w-full py-2 rounded text-left hover:text-red-500"
             >
-              {a === "GPAY"
-                ? "Google Pay"
-                : a === "PHONEPE"
-                ? "PhonePe"
-                : a === "PAYTM"
-                ? "Paytm"
-                : "Any UPI App"}
+              {a}
             </button>
           ))}
         </div>
       )}
 
-      {/* STEP 3 — CONFIRM */}
+      {/* CONFIRM */}
       {method && (
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="font-semibold">
-            Confirm Payment
-          </div>
-
+        <div className="border border-white/30 rounded p-4 space-y-3">
           {method === "UPI" && (
             <input
-              className="border p-3 w-full rounded"
-              placeholder="Enter UTR / Reference Number"
+              className="border border-white/30 bg-transparent p-3 w-full rounded text-white"
+              placeholder="UTR / Reference Number"
               value={utr}
               onChange={(e) => setUtr(e.target.value)}
             />
           )}
 
           {error && (
-            <div className="text-red-600 text-sm">{error}</div>
+            <div className="text-red-500 text-sm">{error}</div>
           )}
 
           <button
             onClick={confirmPaid}
             disabled={submitting}
-            className="bg-black text-white w-full py-3 rounded"
+            className="w-full py-3 rounded border border-red-500 text-red-500 hover:bg-red-500 hover:text-black transition"
           >
-            {submitting ? "Confirming..." : "I Have Paid"}
+            {submitting ? "Confirming…" : "I Have Paid"}
           </button>
         </div>
       )}

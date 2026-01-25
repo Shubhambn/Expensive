@@ -1,4 +1,3 @@
-// src/app/pay/confirm/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,10 +6,18 @@ import { getPeople } from "@/services/peopleService";
 import { createPaymentRequest } from "@/services/paymentRequestService";
 import { PAYEE } from "../../../../public/config/Mvp";
 
-/* ========= MVP PAYEE (ENV ONLY) ========= */
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
 const MY_UPI_ID = PAYEE.upiId || "";
-const MY_UPI_NAME = PAYEE.name|| "You";
+const MY_UPI_NAME = PAYEE.name || "You";
+
+/* ---------- UI HELPERS ---------- */
+const activeBtn =
+  "border-red-500 text-red-500 font-semibold";
+
+const inactiveBtn =
+  "border-white/40 text-white/60 hover:text-white";
 
 export default function ConfirmPage() {
   const router = useRouter();
@@ -35,7 +42,9 @@ export default function ConfirmPage() {
     setIntent(parsed);
 
     getPeople().then((all) => {
-      setPeople(all.filter((p) => parsed.selectedIds.includes(p.id)));
+      setPeople(
+        all.filter((p) => parsed.selectedIds.includes(p.id))
+      );
     });
   }, [router]);
 
@@ -46,11 +55,6 @@ export default function ConfirmPage() {
   /* ---------- SEND WHATSAPP ---------- */
   async function sendWhatsApp(p: any, amount: number) {
     if (sentIds.has(p.id)) return;
-
-    if (!MY_UPI_ID) {
-      alert("UPI ID not configured. Check .env");
-      return;
-    }
 
     setSendingId(p.id);
 
@@ -83,8 +87,7 @@ ${link}
 
       setSentIds((prev) => new Set(prev).add(p.id));
     } catch (err) {
-      console.error("createPaymentRequest failed:", err);
-      alert("Failed to create payment link. Check console.");
+      alert("Failed to create payment link");
     } finally {
       setSendingId(null);
     }
@@ -92,38 +95,48 @@ ${link}
 
   /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-4 bg-white">
-      <h1 className="text-xl font-semibold">Confirm Payment</h1>
+    <main className="min-h-screen bg-black p-4 max-w-md mx-auto space-y-5 text-white">
+      <h1 className="text-xl font-bold text-red-500">
+        Confirm Payment
+      </h1>
 
       {/* SUMMARY */}
-      <div className="border rounded p-3 text-sm">
-        <div className="font-medium">{intent.note}</div>
-        <div>Total Paid: ₹{intent.amount}</div>
-        <div className="text-xs text-gray-500">{date}</div>
+      <div className="border border-white/40 rounded p-3 text-sm space-y-1">
+        <div className="font-semibold text-white">
+          {intent.note}
+        </div>
+        <div className="text-white/70">
+          Total Paid: ₹{intent.amount}
+        </div>
+        <div className="text-xs text-white/40">
+          {date}
+        </div>
       </div>
 
+      {/* STEP 1 — CONFIRM */}
       {!confirmed && (
         <div className="space-y-2">
           <button
             onClick={() => setConfirmed(true)}
-            className="bg-black text-white w-full p-3 rounded"
+            className="w-full border border-red-500 text-red-500 py-3 rounded font-semibold"
           >
             Yes, I Paid
           </button>
 
           <button
             onClick={() => router.push("/pay")}
-            className="border w-full p-3 rounded"
+            className="w-full border border-white/40 text-white/60 py-3 rounded"
           >
             Go Back
           </button>
         </div>
       )}
 
+      {/* STEP 2 — SEND LINKS */}
       {confirmed && (
         <>
           <input
-            className="border p-2 w-full rounded"
+            className="w-full bg-black border border-white/40 p-2 rounded text-white"
             placeholder="UTR / Reference (optional)"
             value={utr}
             onChange={(e) => setUtr(e.target.value)}
@@ -143,10 +156,10 @@ ${link}
                   key={p.id}
                   disabled={sent || sendingId === p.id}
                   onClick={() => sendWhatsApp(p, amount)}
-                  className={`border w-full p-3 text-left rounded ${
+                  className={`w-full border p-3 text-left rounded transition ${
                     sent
-                      ? "bg-green-50 text-green-700"
-                      : "hover:bg-gray-50"
+                      ? "border-red-500 text-red-500"
+                      : "border-white/40 text-white/70 hover:text-white"
                   }`}
                 >
                   {sent
@@ -162,7 +175,7 @@ ${link}
           {sentIds.size === people.length && (
             <button
               onClick={() => router.push("/")}
-              className="bg-black text-white w-full p-3 rounded mt-4"
+              className="w-full border border-white/40 text-white py-3 rounded mt-4"
             >
               Done
             </button>
