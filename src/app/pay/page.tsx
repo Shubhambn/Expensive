@@ -1,3 +1,4 @@
+// src/app/pay/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,9 +8,6 @@ import { getPeople } from "@/services/peopleService";
 
 type Mode = "ME" | "SPLIT" | "PARTITION";
 type Method = "UPI" | "CASH";
-
-const PAYEE_UPI = process.env.NEXT_PUBLIC_UPI_ID || "";
-const PAYEE_NAME = process.env.NEXT_PUBLIC_UPI_NAME || "You";
 
 export default function PayPage() {
   const router = useRouter();
@@ -24,7 +22,6 @@ export default function PayPage() {
   const [customAmounts, setCustomAmounts] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
 
-  /* ---------- AUTH ---------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
@@ -34,7 +31,6 @@ export default function PayPage() {
 
   const total = Number(amount) || 0;
 
-  /* ---------- SPLIT ---------- */
   const participantCount =
     mode === "SPLIT" ? selectedIds.length + 1 : selectedIds.length;
 
@@ -43,7 +39,6 @@ export default function PayPage() {
       ? Math.floor(total / participantCount)
       : 0;
 
-  /* ---------- PARTITION ---------- */
   const partitionSum = useMemo(
     () => Object.values(customAmounts).reduce((s, v) => s + (v || 0), 0),
     [customAmounts]
@@ -56,44 +51,24 @@ export default function PayPage() {
       ? splitAmount
       : Math.max(total - partitionSum, 0);
 
-  /* ---------- VALIDATION ---------- */
   function validate() {
-    if (total <= 0) return setError("Enter amount"), false;
-    if (!note.trim()) return setError("Add a note"), false;
+    if (total <= 0) return setError("Enter valid amount"), false;
+    if (!note.trim()) return setError("Note required"), false;
     if (mode !== "ME" && selectedIds.length === 0)
       return setError("Select people"), false;
     if (mode === "PARTITION" && partitionSum > total)
-      return setError("Amount mismatch"), false;
+      return setError("Partition exceeds total"), false;
     if (!method) return setError("Select payment method"), false;
 
     setError("");
     return true;
   }
 
-  /* ---------- UPI MESSAGE ---------- */
-  const upiMessage = `
-Pay ₹${myAmount}
-UPI: ${PAYEE_UPI}
-Name: ${PAYEE_NAME}
-Note: ${note}
-`.trim();
-
-  /* ---------- OPEN UPI ---------- */
-  function openUpi() {
+  function openUpiApp() {
     if (!validate()) return;
-
-    const params = new URLSearchParams({
-      pa: PAYEE_UPI,
-      pn: PAYEE_NAME,
-      am: myAmount.toString(),
-      cu: "INR",
-      tn: note,
-    });
-
-    window.location.href = `upi://pay?${params.toString()}`;
+    window.location.href = "upi://pay";
   }
 
-  /* ---------- CONFIRM ---------- */
   function confirmPaid() {
     if (!validate()) return;
 
@@ -115,15 +90,14 @@ Note: ${note}
     router.push("/pay/confirm");
   }
 
-  /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-5 bg-white text-black">
+    <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto space-y-5">
       <h1 className="text-xl font-semibold">Pay</h1>
 
       {/* AMOUNT */}
       <input
         type="number"
-        className="border p-3 w-full rounded"
+        className="w-full bg-black border border-white/40 p-2 rounded text-white placeholder:text-white/40"
         placeholder="Amount"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
@@ -131,14 +105,14 @@ Note: ${note}
 
       {/* NOTE */}
       <input
-        className="border p-3 w-full rounded"
-        placeholder="Note (Dinner, Rent...)"
+        className="w-full bg-black border border-white/40 p-2 rounded text-white placeholder:text-white/40"
+        placeholder="Note (Dinner, Trip...)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
 
       {/* MODE */}
-      <div className="flex gap-2">
+      <div className="flex gap-3 text-sm">
         {(["ME", "SPLIT", "PARTITION"] as Mode[]).map((m) => (
           <button
             key={m}
@@ -147,8 +121,10 @@ Note: ${note}
               setSelectedIds([]);
               setCustomAmounts({});
             }}
-            className={`flex-1 border p-2 rounded ${
-              mode === m ? "bg-black text-white" : ""
+            className={`border px-3 py-1 rounded ${
+              mode === m
+                ? "border-white text-white"
+                : "border-white/40 text-white/50"
             }`}
           >
             {m}
@@ -158,11 +134,11 @@ Note: ${note}
 
       {/* PEOPLE */}
       {mode !== "ME" && (
-        <div className="space-y-2">
+        <div className="space-y-2 text-sm">
           {people.map((p) => (
             <label
               key={p.id}
-              className="flex items-center gap-2 border p-2 rounded"
+              className="flex items-center gap-2 text-white/80"
             >
               <input
                 type="checkbox"
@@ -189,7 +165,7 @@ Note: ${note}
             <input
               key={id}
               type="number"
-              className="border p-2 w-full rounded"
+              className="w-full bg-black border border-white/40 p-2 rounded text-white placeholder:text-white/40"
               placeholder={`${p?.name} amount`}
               value={customAmounts[id] || ""}
               onChange={(e) =>
@@ -202,31 +178,22 @@ Note: ${note}
           );
         })}
 
-      {/* SUMMARY */}
-      <div className="border rounded p-3 text-sm space-y-1">
-        <div className="font-medium">You pay</div>
+      {/* PREVIEW */}
+      <div className="border border-white/40 p-3 rounded">
+        <div className="text-sm text-white/60">You Pay</div>
         <div className="text-2xl font-semibold">₹{myAmount}</div>
       </div>
 
-      {/* PAYMENT DETAILS */}
-      <div className="border rounded p-3 text-xs bg-gray-50">
-        <pre className="whitespace-pre-wrap">{upiMessage}</pre>
-        <button
-          onClick={() => navigator.clipboard.writeText(upiMessage)}
-          className="mt-2 border w-full p-2 rounded"
-        >
-          Copy payment details
-        </button>
-      </div>
-
       {/* METHOD */}
-      <div className="flex gap-2">
+      <div className="flex gap-3 text-sm">
         {(["UPI", "CASH"] as Method[]).map((m) => (
           <button
             key={m}
             onClick={() => setMethod(m)}
-            className={`flex-1 border p-2 rounded ${
-              method === m ? "bg-black text-white" : ""
+            className={`border px-3 py-1 rounded ${
+              method === m
+                ? "border-white text-white"
+                : "border-white/40 text-white/50"
             }`}
           >
             {m}
@@ -234,21 +201,21 @@ Note: ${note}
         ))}
       </div>
 
-      {/* ACTION */}
+      {/* OPEN UPI */}
       {method === "UPI" && (
         <button
-          onClick={openUpi}
-          className="bg-black text-white w-full p-3 rounded"
+          onClick={openUpiApp}
+          className="w-full border border-white py-3 rounded text-white"
         >
           Open UPI App
         </button>
       )}
 
-      {error && <div className="text-sm text-red-600">{error}</div>}
+      {error && <div className="text-red-400 text-sm">{error}</div>}
 
       <button
         onClick={confirmPaid}
-        className="bg-black text-white w-full p-3 rounded"
+        className="w-full border border-white py-3 rounded text-white"
       >
         I Have Paid
       </button>

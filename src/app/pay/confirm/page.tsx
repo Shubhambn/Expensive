@@ -7,10 +7,10 @@ import { getPeople } from "@/services/peopleService";
 import { createPaymentRequest } from "@/services/paymentRequestService";
 import { PAYEE } from "../../../../public/config/Mvp";
 
+/* ========= MVP PAYEE (ENV ONLY) ========= */
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
 const MY_UPI_ID = PAYEE.upiId || "";
-const MY_UPI_NAME = PAYEE.name || "You";
+const MY_UPI_NAME = PAYEE.name|| "You";
 
 export default function ConfirmPage() {
   const router = useRouter();
@@ -35,9 +35,7 @@ export default function ConfirmPage() {
     setIntent(parsed);
 
     getPeople().then((all) => {
-      setPeople(
-        all.filter((p) => parsed.selectedIds.includes(p.id))
-      );
+      setPeople(all.filter((p) => parsed.selectedIds.includes(p.id)));
     });
   }, [router]);
 
@@ -49,10 +47,14 @@ export default function ConfirmPage() {
   async function sendWhatsApp(p: any, amount: number) {
     if (sentIds.has(p.id)) return;
 
+    if (!MY_UPI_ID) {
+      alert("UPI ID not configured. Check .env");
+      return;
+    }
+
     setSendingId(p.id);
 
     try {
-      // ✅ Create payment request
       const requestId = await createPaymentRequest({
         personId: p.id,
         personName: p.name,
@@ -81,7 +83,7 @@ ${link}
 
       setSentIds((prev) => new Set(prev).add(p.id));
     } catch (err) {
-      console.error("Payment link error:", err);
+      console.error("createPaymentRequest failed:", err);
       alert("Failed to create payment link. Check console.");
     } finally {
       setSendingId(null);
@@ -90,11 +92,12 @@ ${link}
 
   /* ---------- UI ---------- */
   return (
-    <main className="p-4 max-w-md mx-auto space-y-4">
-      <h1 className="text-xl font-bold">Confirm Payment</h1>
+    <main className="p-4 max-w-md mx-auto space-y-4 bg-white">
+      <h1 className="text-xl font-semibold">Confirm Payment</h1>
 
-      <div className="border p-3 text-sm rounded">
-        <div className="font-semibold">{intent.note}</div>
+      {/* SUMMARY */}
+      <div className="border rounded p-3 text-sm">
+        <div className="font-medium">{intent.note}</div>
         <div>Total Paid: ₹{intent.amount}</div>
         <div className="text-xs text-gray-500">{date}</div>
       </div>
@@ -103,16 +106,16 @@ ${link}
         <div className="space-y-2">
           <button
             onClick={() => setConfirmed(true)}
-            className="bg-green-600 text-white w-full p-2 rounded"
+            className="bg-black text-white w-full p-3 rounded"
           >
-            Yes, Payment Done
+            Yes, I Paid
           </button>
 
           <button
             onClick={() => router.push("/pay")}
-            className="border w-full p-2 rounded"
+            className="border w-full p-3 rounded"
           >
-            No, Go Back
+            Go Back
           </button>
         </div>
       )}
@@ -140,7 +143,7 @@ ${link}
                   key={p.id}
                   disabled={sent || sendingId === p.id}
                   onClick={() => sendWhatsApp(p, amount)}
-                  className={`border w-full p-2 text-left rounded ${
+                  className={`border w-full p-3 text-left rounded ${
                     sent
                       ? "bg-green-50 text-green-700"
                       : "hover:bg-gray-50"
@@ -159,7 +162,7 @@ ${link}
           {sentIds.size === people.length && (
             <button
               onClick={() => router.push("/")}
-              className="bg-black text-white w-full p-2 rounded mt-4"
+              className="bg-black text-white w-full p-3 rounded mt-4"
             >
               Done
             </button>
