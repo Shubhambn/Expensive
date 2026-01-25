@@ -65,9 +65,24 @@ export default function PayPage() {
   }
 
   function openUpiApp() {
-    if (!validate()) return;
+  if (!validate()) return;
+
+  // Android intent – works for GPay, PhonePe, Samsung Wallet
+  const intentUrl =
+    "intent://upi/pay#Intent;" +
+    "scheme=upi;" +
+    "package=com.google.android.apps.nbu.paisa.user;" + // GPay default
+    "end";
+
+  // Try to open UPI app
+  window.location.href = intentUrl;
+
+  // Fallback: generic UPI (some browsers)
+  setTimeout(() => {
     window.location.href = "upi://pay";
-  }
+  }, 300);
+}
+
 
   function confirmPaid() {
     if (!validate()) return;
