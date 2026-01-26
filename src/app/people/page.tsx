@@ -1,3 +1,4 @@
+// src/app/people/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,14 +24,14 @@ export default function PeoplePage() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
-  /* ---------- AUTH GUARD ---------- */
+  /* ---------- AUTH ---------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.push("/auth");
     });
   }, [router]);
 
-  /* ---------- LOAD PEOPLE ---------- */
+  /* ---------- LOAD ---------- */
   useEffect(() => {
     load();
   }, []);
@@ -38,8 +39,7 @@ export default function PeoplePage() {
   async function load() {
     setLoading(true);
     try {
-      const data = await getPeople();
-      setPeople(data);
+      setPeople(await getPeople());
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -50,7 +50,7 @@ export default function PeoplePage() {
   /* ---------- ADD ---------- */
   async function handleAdd() {
     if (!name.trim()) {
-      setError("Name is required");
+      setError("NAME_REQUIRED");
       return;
     }
 
@@ -74,7 +74,7 @@ export default function PeoplePage() {
 
   async function saveEdit() {
     if (!editName.trim()) {
-      setError("Name is required");
+      setError("NAME_REQUIRED");
       return;
     }
 
@@ -89,116 +89,138 @@ export default function PeoplePage() {
 
   /* ---------- DELETE ---------- */
   async function handleDelete(id: string) {
-    if (!confirm("Remove this person?")) return;
-
-    try {
-      await deletePerson(id);
-      load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+    if (!confirm("DELETE_THIS_PERSON?")) return;
+    await deletePerson(id);
+    load();
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-3">People</h1>
+    <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto space-y-5 font-mono">
+      {/* HEADER */}
+      <div className="border border-white/30 p-3 flex justify-between items-center">
+        <h1 className="text-lg tracking-wide">
+          PEOPLE<span className="text-red-500">_</span>
+        </h1>
+        <button
+          onClick={() => router.push("/")}
+          className="text-xs text-white/60 hover:text-white"
+        >
+          BACK
+        </button>
+      </div>
 
       {/* ADD PERSON */}
-      <div className="border p-3 mb-4 rounded">
+      <div className="border border-white/30 p-4 space-y-3">
+        <div className="text-xs text-white/60 tracking-widest">
+          ADD_PLAYER
+        </div>
+
         <input
-          className="border p-2 w-full mb-2"
-          placeholder="Name"
+          className="w-full bg-black border border-white/40 p-2 rounded text-white placeholder:text-white/40"
+          placeholder="NAME"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
 
         <input
-          className="border p-2 w-full mb-2"
-          placeholder="Phone (optional)"
+          className="w-full bg-black border border-white/40 p-2 rounded text-white placeholder:text-white/40"
+          placeholder="PHONE (OPTIONAL)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
 
         {error && (
-          <div className="text-red-600 text-sm mb-2">{error}</div>
+          <div className="text-red-400 text-xs">
+            ERROR: {error}
+          </div>
         )}
 
         <button
           onClick={handleAdd}
-          className="bg-black text-white w-full p-2"
+          className="w-full border border-white py-2 hover:bg-white hover:text-black transition"
         >
-          Add Person
+          ADD
         </button>
       </div>
 
       {/* LIST */}
       {loading && (
-        <div className="text-center text-sm text-gray-500">
-          Loading people...
+        <div className="text-center text-xs text-white/40">
+          LOADING_PLAYERS…
         </div>
       )}
 
       {!loading && people.length === 0 && (
-        <div className="text-gray-500 text-sm text-center">
-          No people added yet
+        <div className="text-center text-xs text-white/40">
+          NO_PLAYERS_FOUND
         </div>
       )}
 
-      {people.map((p) => (
-        <div key={p.id} className="border p-2 mb-2 rounded text-sm">
-          {editingId === p.id ? (
-            <>
-              <input
-                className="border p-1 w-full mb-1"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
-              <input
-                className="border p-1 w-full mb-2"
-                value={editPhone}
-                onChange={(e) => setEditPhone(e.target.value)}
-              />
+      <div className="space-y-3">
+        {people.map((p) => (
+          <div
+            key={p.id}
+            className="border border-white/30 p-3 text-sm"
+          >
+            {editingId === p.id ? (
+              <>
+                <input
+                  className="w-full bg-black border border-white/40 p-1 mb-2 text-white"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+                <input
+                  className="w-full bg-black border border-white/40 p-1 mb-3 text-white"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                />
 
-              <div className="flex gap-2">
-                <button
-                  onClick={saveEdit}
-                  className="bg-black text-white px-3 py-1 text-xs"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingId(null)}
-                  className="border px-3 py-1 text-xs"
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="font-semibold">{p.name}</div>
-              {p.phone && (
-                <div className="text-gray-500">{p.phone}</div>
-              )}
+                <div className="flex gap-3 text-xs">
+                  <button
+                    onClick={saveEdit}
+                    className="border border-white px-3 py-1 hover:bg-white hover:text-black"
+                  >
+                    SAVE
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="border border-white/40 px-3 py-1 text-white/60"
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-semibold tracking-wide">
+                  {p.name}
+                </div>
 
-              <div className="flex gap-4 mt-2 text-xs">
-                <button
-                  onClick={() => startEdit(p)}
-                  className="text-blue-600 underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  className="text-red-600 underline"
-                >
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      ))}
+                {p.phone && (
+                  <div className="text-xs text-white/60">
+                    {p.phone}
+                  </div>
+                )}
+
+                <div className="flex gap-4 mt-3 text-xs">
+                  <button
+                    onClick={() => startEdit(p)}
+                    className="text-white/70 hover:text-white"
+                  >
+                    EDIT
+                  </button>
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    className="text-red-500 hover:text-red-400"
+                  >
+                    DELETE
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
     </main>
   );
 }
